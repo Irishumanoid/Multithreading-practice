@@ -1,9 +1,13 @@
 use std::{
+    iter,
     fs,
     io::{prelude::*, BufReader},
     net::{TcpListener, TcpStream},
 };
+
 use hello::ThreadPool;
+
+
 
 fn main() {
     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
@@ -39,4 +43,36 @@ fn handle_connection(mut stream: TcpStream) {
 
     stream.write_all(response.as_bytes()).unwrap();
 }
+
+
+use messaging_thread_pool::{*, samples::*};
+
+
+pub fn test_messaging_threads_pool(listener: TcpListener) {
+    let pool = messaging_thread_pool::ThreadPool::<Randoms>::new(4);
+    for stream in listener.incoming().take(4) {
+        let stream = stream.unwrap();
+        let stream_clone = stream.try_clone().expect("stream cloning failed");
+        iter::once(move || {
+            let cloned_stream = stream_clone.try_clone().expect("stream cloning failed");
+            move || {
+                handle_connection(cloned_stream);
+            }
+        });
+
+        pool.send_and_receive((0..4usize).map(|i| RandomsAddRequest(i)))
+            .expect("thread pool to be available")
+            .for_each(|response: AddResponse| assert!(response.result().is_ok()));
+    }
+    }
+
+
+fn test_threads_pool(stream: TcpStream) {
+    let pool = threads_pool::ThreadPool::new(4);
+    
+    pool.execute(|| {
+        handle_connection(stream);
+    });
+}
+
 
